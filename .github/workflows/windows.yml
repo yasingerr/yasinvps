@@ -16,55 +16,30 @@ jobs:
         run: |
           Write-Host "Enabling Remote Desktop..."
 
-          # Enable Remote Desktop
-          Set-ItemProperty `
-            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
-            -Name "fDenyTSConnections" `
-            -Value 0
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
 
-          # Enable RDP firewall rules
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-          # Get password
-          $password = ConvertTo-SecureString `
-            $env:RDP_PASSWORD `
-            -AsPlainText `
-            -Force
+          $password = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
 
-          # Check whether runneradmin already exists
           $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
 
           if ($null -eq $user) {
               Write-Host "Creating runneradmin..."
 
-              New-LocalUser `
-                -Name "runneradmin" `
-                -Password $password `
-                -FullName "RDP Administrator" `
-                -Description "Temporary RDP user"
+              New-LocalUser -Name "runneradmin" -Password $password -FullName "RDP Administrator" -Description "Temporary RDP user"
           }
           else {
               Write-Host "runneradmin already exists."
               Write-Host "Updating password..."
 
-              Set-LocalUser `
-                -Name "runneradmin" `
-                -Password $password
+              Set-LocalUser -Name "runneradmin" -Password $password
           }
 
-          # Make sure the user is an administrator
-          Add-LocalGroupMember `
-            -Group "Administrators" `
-            -Member "runneradmin" `
-            -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin" -ErrorAction SilentlyContinue
 
-          # Make sure RDP service is running
-          Set-Service `
-            -Name "TermService" `
-            -StartupType Automatic
-
-          Start-Service `
-            -Name "TermService"
+          Set-Service -Name "TermService" -StartupType Automatic
+          Start-Service -Name "TermService"
 
           Write-Host "RDP enabled successfully."
 
@@ -73,29 +48,25 @@ jobs:
         run: |
           Write-Host "Installing Tailscale..."
 
-          # Fix HTTPS / TLS error
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
           $url = "https/pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $installer = "$env:TEMP\tailscale.msi"
 
           Write-Host "Downloading Tailscale..."
+          Write-Host "URL: $url"
 
-          Invoke-WebRequest `
-            -Uri $url `
-            -OutFile $installer `
-            -UseBasicParsing
+          curl.exe -L --fail --retry 5 --retry-delay 3 -o "$installer" "$url"
 
-          if (!(Test-Path $installer)) {
-              throw "Tailscale installer download failed."
+          if ($LASTEXITCODE -ne 0) {
+              throw "Tailscale download failed. curl exit code: $LASTEXITCODE"
           }
 
-          Write-Host "Tailscale installer downloaded."
+          if (!(Test-Path "$installer&quot) {
+              throw "Tailscale installer was not downloaded."
+          }
 
-          Start-Process `
-            -FilePath "msiexec.exe" `
-            -ArgumentList "/i `"$installer`" /quiet /norestart" `
-            -Wait
+          Write-Host "Tailscale installer downloaded successfully."
+
+          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$installer`" /quiet /norestart" -Wait
 
           Write-Host "Tailscale installed."
 
@@ -108,13 +79,15 @@ jobs:
 
           $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
 
-          if (!(Test-Path $tailscale)) {
+          if (!(Test-Path "$tailscale&quot) {
               throw "Tailscale executable not found."
           }
 
-          & $tailscale up `
-            --authkey="$env:TS_AUTHKEY" `
-            --hostname="github-windows-rdp"
+          & "$tailscale" up --authkey="$env:TS_AUTHKEY" --hostname="github-windows-rdp"
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Tailscale connection failed."
+          }
 
           Write-Host "Tailscale connected."
 
@@ -124,7 +97,7 @@ jobs:
           Start-Sleep -Seconds 5
 
           $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
-          $ip = & $tailscale ip -4
+          $ip = & "$tailscale" ip -4
 
           Write-Host ""
           Write-Host "========================================"
@@ -155,9 +128,7 @@ jobs:
           Write-Host ""
           Write-Host "Checking port 3389..."
 
-          Get-NetTCPConnection `
-            -LocalPort 3389 `
-            -ErrorAction SilentlyContinue
+          Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue
 
       - name: Keep runner alive
         shell: powershell
@@ -170,7 +141,7 @@ jobs:
             Write-Host ""
             Write-Host "===== Tailscale Status ====="
 
-            & $tailscale status
+            & "$tailscale" status
 
             Write-Host ""
             Write-Host "RDP is still running..."
