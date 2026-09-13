@@ -49,7 +49,7 @@ jobs:
           Write-Host "Installing Tailscale..."
 
           $installer = "$env:TEMP\tailscale.msi"
-          $url = "https/pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
 
           Write-Host "Downloading Tailscale..."
           Write-Host "URL: $url"
@@ -72,6 +72,11 @@ jobs:
 
           Write-Host "Tailscale installed."
 
+          if (-not (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe")) {
+              Write-Error "Tailscale executable not found after install."
+              exit 1
+          }
+
       - name: Connect Tailscale
         shell: powershell
         env:
@@ -79,7 +84,7 @@ jobs:
         run: |
           Write-Host "Connecting to Tailscale..."
 
-          $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+          $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
           & $tailscale up --authkey="$env:TS_AUTHKEY" --hostname="github-windows-rdp"
 
@@ -90,7 +95,7 @@ jobs:
         run: |
           Start-Sleep -Seconds 5
 
-          $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+          $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
           $ip = & $tailscale ip -4
 
           Write-Host ""
@@ -130,7 +135,7 @@ jobs:
           Write-Host "Windows RDP runner is running."
 
           while ($true) {
-              $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+              $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
               Write-Host ""
               Write-Host "===== Tailscale Status ====="
