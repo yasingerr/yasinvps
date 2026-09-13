@@ -59,8 +59,12 @@ jobs:
             -ErrorAction SilentlyContinue
 
           # Make sure RDP service is running
-          Set-Service -Name "TermService" -StartupType Automatic
-          Start-Service -Name "TermService"
+          Set-Service `
+            -Name "TermService" `
+            -StartupType Automatic
+
+          Start-Service `
+            -Name "TermService"
 
           Write-Host "RDP enabled successfully."
 
@@ -69,12 +73,24 @@ jobs:
         run: |
           Write-Host "Installing Tailscale..."
 
+          # Fix HTTPS / TLS error
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
           $url = "https/pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $installer = "$env:TEMP\tailscale.msi"
 
+          Write-Host "Downloading Tailscale..."
+
           Invoke-WebRequest `
             -Uri $url `
-            -OutFile $installer
+            -OutFile $installer `
+            -UseBasicParsing
+
+          if (!(Test-Path $installer)) {
+              throw "Tailscale installer download failed."
+          }
+
+          Write-Host "Tailscale installer downloaded."
 
           Start-Process `
             -FilePath "msiexec.exe" `
@@ -91,6 +107,10 @@ jobs:
           Write-Host "Connecting to Tailscale..."
 
           $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+
+          if (!(Test-Path $tailscale)) {
+              throw "Tailscale executable not found."
+          }
 
           & $tailscale up `
             --authkey="$env:TS_AUTHKEY" `
@@ -149,9 +169,11 @@ jobs:
 
             Write-Host ""
             Write-Host "===== Tailscale Status ====="
+
             & $tailscale status
 
             Write-Host ""
             Write-Host "RDP is still running..."
+
             Start-Sleep -Seconds 60
           }
