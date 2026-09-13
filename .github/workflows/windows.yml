@@ -16,25 +16,42 @@ jobs:
         run: |
           Write-Host "Enabling Remote Desktop..."
 
-          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+          Set-ItemProperty `
+            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+            -Name "fDenyTSConnections" `
+            -Value 0
 
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-          $password = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
+          $password = ConvertTo-SecureString `
+            $env:RDP_PASSWORD `
+            -AsPlainText `
+            -Force
 
           $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
 
           if ($null -eq $user) {
               Write-Host "Creating runneradmin..."
-              New-LocalUser -Name "runneradmin" -Password $password -FullName "RDP Administrator" -Description "Temporary RDP user"
+
+              New-LocalUser `
+                -Name "runneradmin" `
+                -Password $password `
+                -FullName "RDP Administrator" `
+                -Description "Temporary RDP user"
           }
           else {
               Write-Host "runneradmin already exists."
               Write-Host "Updating password..."
-              Set-LocalUser -Name "runneradmin" -Password $password
+
+              Set-LocalUser `
+                -Name "runneradmin" `
+                -Password $password
           }
 
-          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember `
+            -Group "Administrators" `
+            -Member "runneradmin" `
+            -ErrorAction SilentlyContinue
 
           Set-Service -Name "TermService" -StartupType Automatic
           Start-Service -Name "TermService"
@@ -83,7 +100,10 @@ jobs:
               "/norestart"
           )
 
-          Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArgs -Wait
+          Start-Process `
+            -FilePath "msiexec.exe" `
+            -ArgumentList $msiArgs `
+            -Wait
 
           Write-Host "Tailscale installed."
 
@@ -94,14 +114,11 @@ jobs:
         run: |
           Write-Host "Connecting to Tailscale..."
 
-          $tailscale = Join-Path $envrogramFiles "Tailscale\tailscale.exe"
+          $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
 
-          & $tailscale up --authkey=$env:TS_AUTHKEY --hostname=github-windows-rdp
-
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Tailscale connection failed."
-              exit 1
-          }
+          & $tailscale up `
+            --authkey="$env:TS_AUTHKEY" `
+            --hostname="github-windows-rdp"
 
           Write-Host "Tailscale connected."
 
@@ -110,7 +127,7 @@ jobs:
         run: |
           Start-Sleep -Seconds 5
 
-          $tailscale = Join-Path $envrogramFiles "Tailscale\tailscale.exe"
+          $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
           $ip = & $tailscale ip -4
 
           Write-Host ""
@@ -122,7 +139,7 @@ jobs:
           Write-Host $ip
           Write-Host ""
           Write-Host "RDP Address:"
-          Write-Host ($ip + ":3389&quot
+          Write-Host "$ip`:3389"
           Write-Host ""
           Write-Host "Username:"
           Write-Host "runneradmin"
@@ -142,7 +159,9 @@ jobs:
           Write-Host ""
           Write-Host "Checking port 3389..."
 
-          Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue
+          Get-NetTCPConnection `
+            -LocalPort 3389 `
+            -ErrorAction SilentlyContinue
 
       - name: Keep runner alive
         shell: powershell
@@ -150,15 +169,14 @@ jobs:
           Write-Host "Windows RDP runner is running."
 
           while ($true) {
-              $tailscale = Join-Path $envrogramFiles "Tailscale\tailscale.exe"
+            $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
 
-              Write-Host ""
-              Write-Host "===== Tailscale Status ====="
+            Write-Host ""
+            Write-Host "===== Tailscale Status ====="
+            & $tailscale status
 
-              & $tailscale status
+            Write-Host ""
+            Write-Host "RDP is still running..."
 
-              Write-Host ""
-              Write-Host "RDP is still running..."
-
-              Start-Sleep -Seconds 60
+            Start-Sleep -Seconds 60
           }
