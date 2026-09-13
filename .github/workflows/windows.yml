@@ -1,0 +1,157 @@
+name: Windows RDP + Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-2025
+    timeout-minutes: 360
+
+    steps:
+      - name: Enable RDP
+        shell: powershell
+        env:
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+        run: |
+          Write-Host "Enabling Remote Desktop..."
+
+          # Enable Remote Desktop
+          Set-ItemProperty `
+            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+            -Name "fDenyTSConnections" `
+            -Value 0
+
+          # Enable RDP firewall rules
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          # Get password
+          $password = ConvertTo-SecureString `
+            $env:RDP_PASSWORD `
+            -AsPlainText `
+            -Force
+
+          # Check whether runneradmin already exists
+          $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
+
+          if ($null -eq $user) {
+              Write-Host "Creating runneradmin..."
+
+              New-LocalUser `
+                -Name "runneradmin" `
+                -Password $password `
+                -FullName "RDP Administrator" `
+                -Description "Temporary RDP user"
+          }
+          else {
+              Write-Host "runneradmin already exists."
+              Write-Host "Updating password..."
+
+              Set-LocalUser `
+                -Name "runneradmin" `
+                -Password $password
+          }
+
+          # Make sure the user is an administrator
+          Add-LocalGroupMember `
+            -Group "Administrators" `
+            -Member "runneradmin" `
+            -ErrorAction SilentlyContinue
+
+          # Make sure RDP service is running
+          Set-Service -Name "TermService" -StartupType Automatic
+          Start-Service -Name "TermService"
+
+          Write-Host "RDP enabled successfully."
+
+      - name: Install Tailscale
+        shell: powershell
+        run: |
+          Write-Host "Installing Tailscale..."
+
+          $url = "https/pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $installer = "$env:TEMP\tailscale.msi"
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile $installer
+
+          Start-Process `
+            -FilePath "msiexec.exe" `
+            -ArgumentList "/i `"$installer`" /quiet /norestart" `
+            -Wait
+
+          Write-Host "Tailscale installed."
+
+      - name: Connect Tailscale
+        shell: powershell
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          Write-Host "Connecting to Tailscale..."
+
+          $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+
+          & $tailscale up `
+            --authkey="$env:TS_AUTHKEY" `
+            --hostname="github-windows-rdp"
+
+          Write-Host "Tailscale connected."
+
+      - name: Get Tailscale IP
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 5
+
+          $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+          $ip = & $tailscale ip -4
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "       WINDOWS RDP IS READY"
+          Write-Host "========================================"
+          Write-Host ""
+          Write-Host "Tailscale IP:"
+          Write-Host $ip
+          Write-Host ""
+          Write-Host "RDP Address:"
+          Write-Host "$ip`:3389"
+          Write-Host ""
+          Write-Host "Username:"
+          Write-Host "runneradmin"
+          Write-Host ""
+          Write-Host "Password:"
+          Write-Host "The value stored in RDP_PASSWORD"
+          Write-Host ""
+          Write-Host "========================================"
+
+      - name: Check RDP
+        shell: powershell
+        run: |
+          Write-Host "Checking RDP service..."
+
+          Get-Service TermService
+
+          Write-Host ""
+          Write-Host "Checking port 3389..."
+
+          Get-NetTCPConnection `
+            -LocalPort 3389 `
+            -ErrorAction SilentlyContinue
+
+      - name: Keep runner alive
+        shell: powershell
+        run: |
+          Write-Host "Windows RDP runner is running."
+
+          while ($true) {
+            $tailscale = "$envrogramFiles\Tailscale\tailscale.exe"
+
+            Write-Host ""
+            Write-Host "===== Tailscale Status ====="
+            & $tailscale status
+
+            Write-Host ""
+            Write-Host "RDP is still running..."
+            Start-Sleep -Seconds 60
+          }
