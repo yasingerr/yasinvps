@@ -69,21 +69,23 @@ jobs:
         run: |
           Write-Host "Installing Tailscale..."
 
-          $url = 'https/pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi'
           $installer = "$env:TEMP\tailscale.msi"
 
           Write-Host "Downloading Tailscale..."
 
-          $webClient = New-Object System.Net.WebClient
-          $webClient.DownloadFile($url, $installer)
-          $webClient.Dispose()
+          curl.exe -L --fail --retry 5 --retry-delay 3 -o "$installer" "https/pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
 
-          if (!(Test-Path $installer)) {
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Tailscale download failed."
+              exit 1
+          }
+
+          if (!(Test-Path "$installer&quot) {
               Write-Error "Tailscale installer was not downloaded."
               exit 1
           }
 
-          Write-Host "Tailscale downloaded."
+          Write-Host "Tailscale downloaded successfully."
 
           Start-Process `
             -FilePath "msiexec.exe" `
